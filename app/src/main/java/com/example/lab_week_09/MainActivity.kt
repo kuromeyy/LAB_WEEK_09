@@ -21,6 +21,9 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.example.lab_week_09.ui.theme.*
+import java.net.URLEncoder
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 
 data class Student(
     var name: String
@@ -35,9 +38,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    //Remember navController for navigation
                     val navController = rememberNavController()
-                    //Here we call App() instead of Home()
                     App(navController = navController)
                 }
             }
@@ -45,24 +46,21 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-//Here, we create a composable function called App
-//This will be the root composable of the app
 @Composable
 fun App(navController: NavHostController) {
-    //Here, we use NavHost to create a navigation graph
-    //We pass the navController as a parameter
-    //We also set the startDestination to "home"
-    //This means that the app will start with the Home composable
     NavHost(
         navController = navController,
         startDestination = "home"
     ) {
-        //Route "home"
         composable("home") {
-            Home { navController.navigate("resultContent/?listData=$it") }
+            Home { list ->
+                // Convert listData to String (as in the module example)
+                val stringData = list.toString()
+                val encoded = URLEncoder.encode(stringData, StandardCharsets.UTF_8.toString())
+                navController.navigate("resultContent/?listData=$encoded")
+            }
         }
 
-        //Route "resultContent"
         composable(
             "resultContent/?listData={listData}",
             arguments = listOf(navArgument("listData") {
@@ -74,10 +72,9 @@ fun App(navController: NavHostController) {
     }
 }
 
-//Home now accepts a navigation lambda
 @Composable
 fun Home(
-    navigateFromHomeToResult: (String) -> Unit
+    navigateFromHomeToResult: (List<Student>) -> Unit
 ) {
     val listData = remember {
         mutableStateListOf(
@@ -87,29 +84,37 @@ fun Home(
         )
     }
     var inputField by remember { mutableStateOf(Student("")) }
+    var showError by remember { mutableStateOf(false) }
 
     HomeContent(
         listData,
         inputField,
-        { input -> inputField = inputField.copy(input) },
+        { input ->
+            inputField = inputField.copy(input)
+            showError = false
+        },
         {
-            if (inputField.name.isNotBlank()) {
+            if (inputField.name.isBlank()) {
+                showError = true
+            } else {
                 listData.add(inputField)
                 inputField = Student("")
+                showError = false
             }
         },
-        { navigateFromHomeToResult(listData.toList().toString()) }
+        { navigateFromHomeToResult(listData.toList()) },
+        showError
     )
 }
 
-//Updated HomeContent with navigation button
 @Composable
 fun HomeContent(
     listData: SnapshotStateList<Student>,
     inputField: Student,
     onInputValueChange: (String) -> Unit,
     onButtonClick: () -> Unit,
-    navigateFromHomeToResult: () -> Unit
+    navigateFromHomeToResult: () -> Unit,
+    showError: Boolean
 ) {
     LazyColumn {
         item {
@@ -119,19 +124,26 @@ fun HomeContent(
                     .fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                OnBackgroundTitleText(
-                    text = stringResource(id = R.string.enter_item)
-                )
+                OnBackgroundTitleText(text = stringResource(id = R.string.enter_item))
 
                 TextField(
                     value = inputField.name,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text
                     ),
-                    onValueChange = { onInputValueChange(it) }
+                    onValueChange = { onInputValueChange(it) },
+                    isError = showError,
+                    label = { Text("Enter Name") }
                 )
 
-                //Two buttons side by side
+                if (showError) {
+                    Text(
+                        text = "Name cannot be empty!",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
                 Row {
                     PrimaryTextButton(
                         text = stringResource(id = R.string.button_click)
@@ -161,22 +173,29 @@ fun HomeContent(
     }
 }
 
-//ResultContent page for displaying passed data
+// ✅ BONUS (sesuai modul screenshot): tampilkan list sebagai String saja
 @Composable
 fun ResultContent(listData: String) {
+    val decoded = remember {
+        try {
+            URLDecoder.decode(listData, StandardCharsets.UTF_8.toString())
+        } catch (e: Exception) {
+            listData
+        }
+    }
+
     Column(
         modifier = Modifier
-            .padding(vertical = 4.dp)
+            .padding(16.dp)
             .fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.Start
     ) {
-        OnBackgroundItemText(text = listData)
+        OnBackgroundItemText(text = decoded)
     }
 }
 
 @Preview(showBackground = true)
 @Composable
 fun PreviewHome() {
-    //Preview just shows home without navigation
     Home { }
 }
